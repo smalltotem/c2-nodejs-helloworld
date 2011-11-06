@@ -1,7 +1,7 @@
 var app = require('express').createServer();
 
 app.get('/', function(req, res){
-  res.send('hello world powered by OpDemand');
+  res.send('Powered by OpDemand');
 });
 
 app.listen(3000);
