@@ -1,0 +1,18 @@
+#!/bin/sh -x
+
+# C2 upgrade script which runs as "ubuntu" each time an upgrade is triggered
+#
+# NOTE: git repository update is performed immediately prior
+
+# upgrade packages
+sudo apt-get update && sudo apt-get dist-upgrade -y --force-yes
+
+# upgrade application
+cd /home/ubuntu/repo
+npm install
+
+# start the daemon
+sudo restart nodejs
+
+# stamp date
+sudo date > /var/cache/c2/date-last-upgrade
