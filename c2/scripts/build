@@ -8,7 +8,7 @@
 # Use double-percent to escape percent signs.
 
 # install chris-lea's node ppa for latest node runtime
-apt-add-repository ppa:chris-lea/node.js
+apt-add-repository ppa:chris-lea/node.js -y
 
 # install packages
 apt-get install -yq --force-yes nodejs
