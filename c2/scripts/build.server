@@ -1,0 +1,44 @@
+#!/bin/sh -x
+
+# C2 build script which runs as "root" on first boot
+#
+# NOTE: variables that start with a percent-sign will be substituted
+# using /var/cache/c2/inputs.json.
+#
+# Use double-percent to escape percent signs.
+
+# install chris-lea's node ppa for latest node runtime
+apt-add-repository ppa:chris-lea/node.js -y
+
+# install packages
+apt-get install -yq --force-yes nodejs
+
+# download/install user-specified packages
+apt-get install -y --force-yes %(additional_packages)s
+
+# install npm/coffeescript
+export clean=yes
+curl http://npmjs.org/install.sh | sh
+npm install -g coffee-script
+
+# bootstrap application
+cd /home/ubuntu/repo
+npm install
+
+# install upstart daemon
+cat > /etc/init/nodejs.conf <<EOF
+#!upstart
+description "node.js dev server"
+author      "OpDemand"
+
+start on (local-filesystems and net-device-up IFACE=eth0)
+stop on shutdown
+
+script
+   export HOME="/home/ubuntu"
+   exec sudo -u ubuntu -i node /home/ubuntu/repo/app.js 2>&1 >> /var/log/nodejs.log
+end script
+EOF
+
+# start the daemon
+start nodejs

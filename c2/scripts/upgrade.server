@@ -1,0 +1,15 @@
+#!/bin/sh -x
+
+# C2 upgrade script which runs as "root" each time an upgrade is triggered
+#
+# NOTE: repository update is performed immediately prior
+
+# upgrade packages
+apt-get update && apt-get dist-upgrade -y --force-yes
+
+# upgrade application
+cd /home/ubuntu/repo
+sudo -u ubuntu npm install
+
+# start the daemon
+restart nodejs
