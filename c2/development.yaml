@@ -1,0 +1,237 @@
+doctype: template
+impl: c2core.logical.platform.Template
+# editable platform contents
+contents:
+  name: Node.js Development
+  description: |
+               Creates a Ubuntu server, installs Node.js and the Node package manager.
+               C2 then clones a Git repository containing a Node application,
+               and uses the Linux "upstart" daemon to launch the Node server.
+               To customize first boot behavior, modify <repo_root>/c2/scripts/build.
+               To customize upgrade behavior, modify <repo_root>/c2/scripts/upgrade.
+  documentation: https://desk.opdemand.com/entries/20674693-node-js-development-platform
+  package: c2.ubuntu.nodejs.dev
+  categories: [ web, nodejs, javascript ]
+  url: https://github.com/opdemand/c2-nodejs-helloworld/blob/master/c2/development.yaml
+# form fields
+forms:
+  # platform config form
+  config:
+    sections:
+      - name: Cloud
+        fields:
+          cloud_name:
+            title: Region
+            description: Name of AWS region
+            type: clouds
+          cloud_zone:
+            title: Zone
+            description: Name of specific AWS zone to use
+            type: zone
+          instance_type:
+            title: Instance Type
+            description: EC2 Instance Type
+            type: text
+      - name: SSH
+        fields:
+          ssh_public_key:
+            title: SSH Public Key
+            description: SSH public key for server authentication
+            type: textarea
+      - name: Repository
+        fields:
+          app_repository_url:
+            title: Repository URL
+            description: Git repository containing application code
+            type: github
+          repository_private_key:
+            title: Repository Key
+            description: SSH private key for private repository access (optional)
+            type: textarea
+      - name: Networking
+        fields:
+          access_network:
+            title: Access Network
+            description: Network mask for public users
+            type: text
+          admin_network:
+            title: Admin Network
+            description: Network mask for admin users
+            type: text
+          access_port:
+            title: Access Port
+            description: TCP port for public access
+            type: text
+      - name: Advanced
+        fields:
+          additional_packages:
+            title: Additional Packages
+            description: Additional packages to install on boot (space-separated)
+            type: text
+          user_bootstrap_script:
+            title: Bootstrap Script URL
+            description: URL for user-defined script to run on bootstrap
+            type: github
+          user_build_script:
+            title: Build Script URL
+            description: URL for user-defined script to run on first build
+            type: github
+          user_upgrade_script:
+            title: Upgrade Script URL
+            description: URL for user-defined upgrade script
+            type: github
+  # platform publish form
+  publish:
+    ssh_url:
+      title: SSH URL
+      description: URL for accessing the server over SSH
+      type: link
+    access_url:
+      title: Access URL
+      description: URL for accessing the web application
+      type: link
+# platform configuration
+config:
+  doctype: config
+  impl: c2core.resolve.Config
+  contents:
+    instance_type: c1.medium
+    access_network: 0.0.0.0/0
+    access_port: 3000
+    admin_network: 0.0.0.0/0
+    cloud_name: us-east-1
+    cloud_zone:
+    hostname: nodejs
+    image_id:
+    ssh_public_key:
+    additional_packages: fail2ban
+    app_repository_url: https://github.com/opdemand/c2-nodejs-helloworld.git
+    repository_private_key:
+    user_bootstrap_script: https://raw.github.com/opdemand/c2-templates/master/ubuntu/shared/bootstrap.github.sh
+    user_build_script: file:///home/ubuntu/repo/c2/scripts/build.server
+    user_upgrade_script: file:///home/ubuntu/repo/c2/scripts/upgrade.server
+# ordered platform tiers
+tiers:
+  # next tier
+  - doctype: tier
+    impl: c2core.logical.tier.Tier
+    contents:
+      name: Security Tier
+    components:
+      # keypair
+      keypair:
+        doctype: keypair
+        impl: c2aws.ec2.KeyPair
+        output:
+          keypair: name
+          key_material: material
+        contents:
+          name_prefix: nodejs
+  # next tier
+  - doctype: tier
+    impl: c2core.logical.tier.Tier
+    contents:
+      name: Network Tier
+    components:
+      # security group
+      sg:
+        doctype: firewall
+        impl: c2aws.ec2.SecurityGroup
+        output:
+          sg: name
+        contents:
+          name_prefix: nodejs
+          description: Nodejs Ingess
+        components:
+          rules:
+            - doctype: firewall_rule
+              impl: c2aws.ec2.SecurityGroupRule
+              input:
+                cidr_ip: admin_network
+              contents:
+                ip_protocol: tcp
+            - doctype: firewall_rule
+              impl: c2aws.ec2.SecurityGroupRule
+              input:
+                cidr_ip: access_network
+                from_port: access_port
+                to_port: access_port
+  # next tier
+  - doctype: tier
+    impl: c2core.logical.tier.Tier
+    contents:
+      name: Server Tier
+    components:
+      server:
+        doctype: server
+        impl: c2aws.ec2.Instance
+        input:
+          image_id: image_id
+          instance_type: instance_type
+          keypair: keypair
+          security_groups: [ sg ]
+          zone: cloud_zone
+          # scripts
+          bootstrap_script: user_bootstrap_script
+          build_script: user_build_script
+          upgrade_script: user_upgrade_script
+        output:
+          private_dns_name: private_dns_name
+          public_dns_name: public_dns_name
+        publish:
+          ssh_url: ssh://ubuntu@%(public_dns_name)s/
+          access_url: http://%(public_dns_name)s:3000/
+        monitor:
+          policy:
+            attempts: 300
+            port: 3000
+        contents:
+          name: nodejs
+          security_groups: []
+          user_data: |
+            #cloud-config
+
+            apt_update: true
+            apt_upgrade: true
+            byobu_by_default: system
+
+            manage_etc_hosts: True
+            hostname: %(hostname)s
+
+            ssh_authorized_keys:
+              - %(ssh_public_key)s
+
+            # NOTE: called on first boot only
+            runcmd:
+             # create c2 working/log directories
+             - mkdir -p /var/cache/c2
+             - mkdir -p /var/log/c2
+             # write out inputs as json
+             - |
+               cat > /var/cache/c2/inputs.json <<EOF
+               %(json_context)s
+               EOF
+             - chmod 0600 /var/cache/c2/inputs.json
+             # prepare c2-replace, for outputting input-substituted strings to stdout
+             - |
+               cat > /var/cache/c2/replace <<EOF
+               #!/usr/bin/env python
+               import sys
+               import json
+               with open("/var/cache/c2/inputs.json") as f:
+                 data = f.read()
+                 inputs = json.loads(data)
+               inp = sys.stdin.read()
+               try:
+                   out = inp %% inputs
+               except KeyError, e:
+                   sys.stderr.write("c2-replace error: "+e+"\n")
+                   sys.exit(1)
+               sys.stdout.write(out)
+               EOF
+             - chmod 0755 /var/cache/c2/replace
+             - ln -s /var/cache/c2/replace /usr/bin/c2-replace
+             - curl %(bootstrap_script)s > /var/cache/c2/bootstrap.template
+             - cat /var/cache/c2/bootstrap.template | c2-replace > /var/cache/c2/bootstrap
+             - chmod 0755 /var/cache/c2/bootstrap
+             - /var/cache/c2/bootstrap 2>&1 | tee -a /var/log/c2/bootstrap.log
