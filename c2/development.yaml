@@ -3,7 +3,7 @@ impl: c2core.logical.platform.Template
 # editable platform contents
 contents:
   name: Node.js Development
-  description: |
+  description: >
                Creates a Ubuntu server, installs Node.js and the Node package manager.
                C2 then clones a Git repository containing a Node application,
                and uses the Linux "upstart" daemon to launch the Node server.
