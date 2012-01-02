@@ -225,7 +225,7 @@ tiers:
                try:
                    out = inp %% inputs
                except KeyError, e:
-                   sys.stderr.write("c2-replace error: "+e+"\n")
+                   sys.stderr.write("c2-replace error: "+str(e)+"\n")
                    sys.exit(1)
                sys.stdout.write(out)
                EOF
